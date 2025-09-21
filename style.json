@@ -6,7 +6,7 @@
   "sources": {
     "osm": {
       "type": "vector",
-      "url": "mbtiles://india-states.mbtiles"
+      "url": "https://sanjeevdg.github.io/india-states.mbtiles"
     }
   },
   "layers": [
