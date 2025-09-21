@@ -1,0 +1,22 @@
+{
+  "version": 8,
+  "name": "Nagpur Map",
+  "center": [79.0882, 21.1458], 
+  "zoom": 8,
+  "sources": {
+    "osm": {
+      "type": "vector",
+      "url": "mbtiles://india-states.mbtiles"
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#e0e0e0"
+      }
+    }    
+  ]
+}
+
