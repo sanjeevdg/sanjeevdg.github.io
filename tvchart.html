@@ -1,0 +1,122 @@
+# chart.html
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Multi‑Pane TradingView</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #000;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+      }
+      #container {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+      }
+    </style>
+
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+  </head>
+
+  <body>
+    <div id="container"></div>
+
+    <script>
+      const container = document.getElementById("container");
+      const chart = LightweightCharts.createChart(container, {
+        layout: { background: { color: "#000" }, textColor: "#DDD" },
+        timeScale: { borderVisible: false },
+      });
+
+      const candleSeries = chart.addCandlestickSeries();
+
+      const volumePane = chart.addHistogramSeries({
+        priceScaleId: "volume",
+        scaleMargins: { top: 0.8, bottom: 0 },
+      });
+
+      chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+
+      const rsiPane = chart.addLineSeries({ priceScaleId: "rsi" });
+      chart.priceScale("rsi").applyOptions({ scaleMargins: { top: 0.6, bottom: 0 } });
+
+      const macdPane = chart.addLineSeries({ priceScaleId: "macd" });
+      chart.priceScale("macd").applyOptions({ scaleMargins: { top: 0.3, bottom: 0 } });
+
+      const customPane = chart.addLineSeries({ priceScaleId: "custom" });
+      chart.priceScale("custom").applyOptions({ scaleMargins: { top: 0, bottom: 0 } });
+
+      document.addEventListener("message", (event) => {
+        const msg = JSON.parse(event.data);
+
+        if (msg.type === "updateData") {
+          const { candles, volume, rsi, macd, custom } = msg.payload;
+
+          candleSeries.setData(candles);
+          volumePane.setData(volume);
+          rsiPane.setData(rsi);
+          macdPane.setData(macd);
+          customPane.setData(custom);
+        }
+      });
+
+      function sendToReact(message) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(message));
+      }
+    </script>
+  </body>
+</html>
+```
+
+# React Native Component (using WebView)
+
+```tsx
+import React, { useRef, useEffect } from "react";
+import { View } from "react-native";
+import { WebView } from "react-native-webview";
+
+export default function MultiPaneChart({ data }) {
+  const webviewRef = useRef(null);
+
+  const html = require("./chart.html");
+
+  useEffect(() => {
+    if (!data) return;
+
+    const payload = {
+      type: "updateData",
+      payload: {
+        candles: data.candles,
+        volume: data.volume,
+        rsi: data.rsi,
+        macd: data.macd,
+        custom: data.customIndicator,
+      },
+    };
+
+    webviewRef.current?.postMessage(JSON.stringify(payload));
+  }, [data]);
+
+  return (
+    <View style={{ flex: 1 }}>
+      <WebView
+        ref={webviewRef}
+        originWhitelist={["*"]}
+        source={html}
+        javaScriptEnabled
+        onMessage={(event) => {
+          const msg = JSON.parse(event.nativeEvent.data);
+          console.log("Message from chart:", msg);
+        }}
+        style={{ flex: 1 }}
+      />
+    </View>
+  );
+}
+
