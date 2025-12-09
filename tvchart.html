@@ -1,122 +1,153 @@
-# chart.html
-
-<!DOCTYPE html>
+<!doctype html>
 <html>
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Multi‑Pane TradingView</title>
-    <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        background: #000;
-        height: 100%;
-        width: 100%;
-        overflow: hidden;
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Multi-Pane Trading Chart</title>
+  <style>
+    html,body { height:100%; margin:0; background:#0b1220; color:#ddd; }
+    #container { height:100%; width:100%; }
+  </style>
+
+  <!-- Use a specific UMD build that exposes LightweightCharts globally -->
+  <script src="https://unpkg.com/lightweight-charts@3.9.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <div id="container"></div>
+
+  <script>
+    (function () {
+      // ensure library loaded
+      if (typeof LightweightCharts === 'undefined') {
+        document.body.innerHTML = '<pre style="color:salmon;padding:16px">LightweightCharts failed to load.</pre>';
+        return;
       }
-      #container {
-        position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
-      }
-    </style>
 
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-  </head>
+      const container = document.getElementById('container');
 
-  <body>
-    <div id="container"></div>
-
-    <script>
-      const container = document.getElementById("container");
+      // create chart (store in a var accessible to console)
       const chart = LightweightCharts.createChart(container, {
-        layout: { background: { color: "#000" }, textColor: "#DDD" },
-        timeScale: { borderVisible: false },
+        layout: {
+          background: { color: '#0b1220' },
+          textColor: '#C9D1D9'
+        },
+        rightPriceScale: { visible: true },
+        timeScale: { timeVisible: true, borderVisible: false },
+        crosshair: { vertLine: { color: '#555' }, horzLine: { color: '#555' } }
       });
 
-      const candleSeries = chart.addCandlestickSeries();
-
-      const volumePane = chart.addHistogramSeries({
-        priceScaleId: "volume",
-        scaleMargins: { top: 0.8, bottom: 0 },
-      });
-
-      chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
-
-      const rsiPane = chart.addLineSeries({ priceScaleId: "rsi" });
-      chart.priceScale("rsi").applyOptions({ scaleMargins: { top: 0.6, bottom: 0 } });
-
-      const macdPane = chart.addLineSeries({ priceScaleId: "macd" });
-      chart.priceScale("macd").applyOptions({ scaleMargins: { top: 0.3, bottom: 0 } });
-
-      const customPane = chart.addLineSeries({ priceScaleId: "custom" });
-      chart.priceScale("custom").applyOptions({ scaleMargins: { top: 0, bottom: 0 } });
-
-      document.addEventListener("message", (event) => {
-        const msg = JSON.parse(event.data);
-
-        if (msg.type === "updateData") {
-          const { candles, volume, rsi, macd, custom } = msg.payload;
-
-          candleSeries.setData(candles);
-          volumePane.setData(volume);
-          rsiPane.setData(rsi);
-          macdPane.setData(macd);
-          customPane.setData(custom);
-        }
-      });
-
-      function sendToReact(message) {
-        window.ReactNativeWebView.postMessage(JSON.stringify(message));
+      // Verify chart API
+      if (typeof chart.addCandlestickSeries !== 'function') {
+        console.error('chart.addCandlestickSeries is not available. Chart API:', chart);
+        document.body.innerHTML = '<pre style="color:salmon;padding:16px">Chart API missing addCandlestickSeries()</pre>';
+        return;
       }
-    </script>
-  </body>
+
+      // Main price pane
+      const candleSeries = chart.addCandlestickSeries({
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        borderVisible: false,
+        wickUpColor: '#26a69a',
+        wickDownColor: '#ef5350'
+      });
+
+      // Volume pane (histogram). We'll create a price scale for it via options
+      const volumeSeries = chart.addHistogramSeries({
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'volume',
+        scaleMargins: { top: 0.8, bottom: 0 }
+      });
+
+      // RSI pane (line)
+      const rsiSeries = chart.addLineSeries({
+        priceScaleId: 'rsi',
+        priceFormat: { type: 'price' },
+        scaleMargins: { top: 0.6, bottom: 0 }
+      });
+
+      // MACD pane (two lines could be used; here we create two series)
+      const macdFast = chart.addLineSeries({ priceScaleId: 'macd' });
+      const macdSlow = chart.addLineSeries({ priceScaleId: 'macd' });
+
+      // Custom indicator pane
+      const customSeries = chart.addLineSeries({ priceScaleId: 'custom' });
+
+      // helper to safely set data (no-op if missing)
+      function safeSet(series, arr) {
+        try {
+          if (!series || !arr) return;
+          // Lightweight Charts expects arrays in ascending time order (oldest first)
+          series.setData(arr);
+        } catch (err) {
+          console.error('safeSet error', err);
+        }
+      }
+
+      // Handle messages from React Native WebView
+      const handleMessage = (raw) => {
+        let msg;
+        try {
+          msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        } catch (e) {
+          console.error('Invalid JSON message', e, raw);
+          return;
+        }
+
+        if (!msg || msg.type !== 'updateData') return;
+
+        const p = msg.payload || {};
+
+        // Expected data shapes:
+        // candles: [{ time: '2025-12-01', open:..., high:..., low:..., close:... }, ...]
+        // volume: [{ time: '2025-12-01', value: 12345, color: '#26a69a' }, ...]
+        // rsi: [{ time: '2025-12-01', value: 60 }, ...]
+        // macdFast / macdSlow: [{ time, value }, ...]
+        // custom: [{ time, value }, ...]
+
+        if (p.candles) safeSet(candleSeries, p.candles);
+        if (p.volume) safeSet(volumeSeries, p.volume);
+        if (p.rsi) safeSet(rsiSeries, p.rsi);
+        if (p.macdFast) safeSet(macdFast, p.macdFast);
+        if (p.macdSlow) safeSet(macdSlow, p.macdSlow);
+        if (p.custom) safeSet(customSeries, p.custom);
+      };
+
+      // WebView message compatibility:
+      // Android: document.addEventListener('message', callback)
+      // iOS: window.addEventListener('message', callback)
+      document.addEventListener('message', function (e) { handleMessage(e.data); });
+      window.addEventListener('message', function (e) { handleMessage(e.data); });
+
+      // Also expose a small API to RN via postMessage back
+      function sendToReact(obj) {
+        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+          window.ReactNativeWebView.postMessage(JSON.stringify(obj));
+        } else {
+          // fallback for browser debugging
+          console.log('toReact:', obj);
+        }
+      }
+
+      // Send ready signal
+      sendToReact({ type: 'ready' });
+
+      // Make chart resize-friendly
+      let resizeTimer = null;
+      function resizeHandler() {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+        }, 120);
+      }
+      window.addEventListener('resize', resizeHandler);
+      // initial apply
+      setTimeout(() => chart.applyOptions({ width: container.clientWidth, height: container.clientHeight }), 0);
+
+      // expose for debugging
+      window.__TV_CHART = { chart, candleSeries, volumeSeries, rsiSeries, macdFast, macdSlow, customSeries };
+
+    })();
+  </script>
+</body>
 </html>
-```
-
-# React Native Component (using WebView)
-
-```tsx
-import React, { useRef, useEffect } from "react";
-import { View } from "react-native";
-import { WebView } from "react-native-webview";
-
-export default function MultiPaneChart({ data }) {
-  const webviewRef = useRef(null);
-
-  const html = require("./chart.html");
-
-  useEffect(() => {
-    if (!data) return;
-
-    const payload = {
-      type: "updateData",
-      payload: {
-        candles: data.candles,
-        volume: data.volume,
-        rsi: data.rsi,
-        macd: data.macd,
-        custom: data.customIndicator,
-      },
-    };
-
-    webviewRef.current?.postMessage(JSON.stringify(payload));
-  }, [data]);
-
-  return (
-    <View style={{ flex: 1 }}>
-      <WebView
-        ref={webviewRef}
-        originWhitelist={["*"]}
-        source={html}
-        javaScriptEnabled
-        onMessage={(event) => {
-          const msg = JSON.parse(event.nativeEvent.data);
-          console.log("Message from chart:", msg);
-        }}
-        style={{ flex: 1 }}
-      />
-    </View>
-  );
-}
-
