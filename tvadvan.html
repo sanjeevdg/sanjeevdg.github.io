@@ -405,6 +405,7 @@
 			return getQueryParam('tvwidgetsymbol');
 		}
 		const symbol = readSymbolFromQueryString() || 'NASDAQ:AAPL';
+		console.log('logged symbol==',symbol);
 		if (symbol) {
 			document.title = `Stock Details - ${symbol}`;
 		}
