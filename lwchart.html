@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Lightweight Charts v5 Multi-Pane</title>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #131722;
+            color: white;
+            font-family: sans-serif;
+        }
+        #chart-container {
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-pane {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="chart-container">
+        <div id="candlestick-pane" class="chart-pane"></div>
+        <div id="volume-pane" class="chart-pane"></div>
+        <div id="macd-pane" class="chart-pane"></div>
+        <div id="rsi-pane" class="chart-pane"></div>
+    </div>
+
+    <script>
+        const { createChart, CandlestickSeries, HistogramSeries, LineSeries, TimeScaleMode } = LightweightCharts;
+
+        // Function to generate sample data (replace with your actual data fetching logic)
+        function generateSampleData() {
+            // In a real app, fetch this from an API or receive it via postMessage from React Native
+            // Using a placeholder for brevity. The data format must be correct.
+            const data = [
+                { time: '2023-01-01', open: 10, high: 12, low: 8, close: 11, volume: 100 },
+                { time: '2023-01-02', open: 11, high: 14, low: 10, close: 13, volume: 120 },
+                { time: '2023-01-03', open: 13, high: 15, low: 12, close: 14, volume: 140 },
+                { time: '2023-01-04', open: 14, high: 16, low: 13, close: 15, volume: 160 },
+                { time: '2023-01-05', open: 15, high: 17, low: 14, close: 16, volume: 180 },
+                { time: '2023-01-06', open: 16, high: 18, low: 15, close: 17, volume: 200 },
+                // Add more data points...
+            ];
+            return data;
+        }
+        const data = generateSampleData();
+
+        // Placeholder functions to calculate indicators (you would use a library like 'tulind' on the server side or include calculation logic here)
+        // For this example, we will use simplified/dummy data for the indicators
+        function calculateMACD(data) {
+            return data.map(item => ({ time: item.time, value: item.close / 10 })); // Dummy MACD line
+        }
+
+        function calculateRSI(data) {
+            return data.map(item => ({ time: item.time, value: 50 + (item.close - 10) })); // Dummy RSI line
+        }
+
+        const macdData = calculateMACD(data);
+        const rsiData = calculateRSI(data);
+
+        // --- Chart Creation ---
+
+        // Main Chart (Candlestick)
+        const candlestickChart = createChart(document.getElementById('candlestick-pane'), {
+            layout: { background: { color: '#131722' }, textColor: '#d1d4dc' },
+            grid: { vertLines: { color: '#363c4e' }, horzLines: { color: '#363c4e' } },
+            autoSize: true
+        });
+        const candlestickSeries = candlestickChart.addCandlestickSeries();
+        candlestickSeries.setData(data);
+
+        // Volume Pane (needs to share time scale)
+        const volumeChart = createChart(document.getElementById('volume-pane'), {
+            layout: { background: { color: '#131722' }, textColor: '#d1d4dc' },
+            grid: { vertLines: { color: '#363c4e' }, horzLines: { color: '#363c4e' } },
+            height: 100, // Reduced height for sub-pane
+            autoSize: true
+        });
+        const volumeSeries = volumeChart.addHistogramSeries({ color: '#26a69a', priceFormat: { type: 'volume', minMove: 0.0001 } });
+        volumeSeries.setData(data.map(d => ({ time: d.time, value: d.volume, color: d.close > d.open ? '#26a69a' : '#ef5350' })));
+        volumeChart.timeScale.addSeries(volumeSeries); // Sync time scale
+
+        // MACD Pane
+        const macdChart = createChart(document.getElementById('macd-pane'), {
+            layout: { background: { color: '#131722' }, textColor: '#d1d4dc' },
+            grid: { vertLines: { color: '#363c4e' }, horzLines: { color: '#363c4e' } },
+            height: 100,
+            autoSize: true
+        });
+        const macdLine = macdChart.addLineSeries({ color: '#2962FF', lineWidth: 2 });
+        macdLine.setData(macdData);
+        macdChart.timeScale.addSeries(macdLine);
+
+        // RSI Pane
+        const rsiChart = createChart(document.getElementById('rsi-pane'), {
+            layout: { background: { color: '#131722' }, textColor: '#d1d4dc' },
+            grid: { vertLines: { color: '#363c4e' }, horzLines: { color: '#363c4e' } },
+            height: 100,
+            autoSize: true
+        });
+        const rsiLine = rsiChart.addLineSeries({ color: '#FF6CC8', lineWidth: 2 });
+        rsiLine.setData(rsiData);
+        rsiChart.timeScale.addSeries(rsiLine);
+
+        // Function to synchronize the time scales of all charts
+        function synchronizeCharts(mainChart, ...charts) {
+            mainChart.timeScale.subscribeVisibleTimeRangeChange(() => {
+                const range = mainChart.timeScale.getVisibleTimeRange();
+                charts.forEach(chart => chart.timeScale.setVisibleTimeRange(range));
+            });
+        }
+        synchronizeCharts(candlestickChart, volumeChart, macdChart, rsiChart);
+
+        // Handle window resize to auto-resize the charts
+        window.addEventListener('resize', () => {
+            candlestickChart.resize(document.getElementById('candlestick-pane').clientWidth, document.getElementById('candlestick-pane').clientHeight);
+            volumeChart.resize(document.getElementById('volume-pane').clientWidth, document.getElementById('volume-pane').clientHeight);
+            macdChart.resize(document.getElementById('macd-pane').clientWidth, document.getElementById('macd-pane').clientHeight);
+            rsiChart.resize(document.getElementById('rsi-pane').clientWidth, document.getElementById('rsi-pane').clientHeight);
+        });
+
+        // Example of sending a message back to React Native
+        if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage('Chart loaded and ready!');
+        }
+    </script>
+</body>
+</html>
